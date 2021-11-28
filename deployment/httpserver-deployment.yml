@@ -1,1 +1,80 @@
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpserver
+  labels:
+    app: httpserver
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: httpserver
+  template:
+    metadata:
+      labels:
+        app: httpserver
+    spec:
+      containers:
+      - name: read-log
+        image: busybox
+        args: 
+        - /bin/sh
+        - -c
+        - tail -f /var/log/httpserver.log
+        volumeMounts:
+        - mountPath: /var/log
+          name: log
 
+      - name: httpserver
+        image: cyuliu/httpserver:v1.0
+        env: 
+          - name: version
+            valueFrom: 
+              configMapKeyRef:
+                name: httpserver-cm
+                key: version
+        volumeMounts:
+        - mountPath: /var/log
+          name: log
+        lifecycle: 
+          postStart: 
+            exec: 
+              command: ["/bin/sh", "-c", "echo 'server starting...' >> /var/log/httpserver.log"]
+          preStop: 
+            exec:
+              command: ["/bin/sh", "-c", "echo 'server stopping...' >> /var/log/httpserver.log"]
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "0.2"
+            memory: "400Mi"
+          requests:
+            cpu: "0.1"
+            memory: "200Mi"
+
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 15
+
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 15
+      volumes:
+      - name: log
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: httpserver-cm
+data:
+  version: "v1"
+```
